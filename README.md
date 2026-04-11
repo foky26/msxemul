@@ -6,7 +6,7 @@ https://github.com/hemkr/ttgo-msxemul
 All the credits and thanks for kemkr
 
 Some points have been enhanced and some problems solved:
-- FabGL Menu of selection of Files. Games can be in any directory, but MSX.ROM and DISK.COM must be in SD in root directory.
+- FabGL Menu of selection of Files. Games can be in any directory, but MSX.ROM and DISK.ROM must be in SD in root directory.
 - Sound not sttoping after game: Fixed.
 - Error in sprites: Fixed.
 - Larger screen for MSX Games.
