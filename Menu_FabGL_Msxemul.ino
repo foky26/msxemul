@@ -141,6 +141,7 @@ class MyApp : public uiApp {
     
   
     Canvas->clear(); 
+    Canvas->waitCompletion();
     VGAController.setResolution(VGA_320x200_60HzD); // Resolution for MSX
     VGAController.setMouseCursor(nullptr);
 
@@ -160,14 +161,17 @@ class MyApp : public uiApp {
 
    
     // StartMSX 
+    emuRunning=true;
     int result = StartMSX(Mode, RAMPages, VRAMPages);
     Serial.printf("StartMSX returned: %d\n", result);
+    emuRunning=false;
  
-   
-    Canvas->clear();
+    StopAudio(); 
+  
+    
     
     TrashMachine();
-    InitMachine();
+    //InitMachine();
          
     quit(0);
 
@@ -228,6 +232,7 @@ class MyApp : public uiApp {
     Serial.printf("Loading ROM: %s\n", fichero);
   
     Canvas->clear(); 
+    Canvas->waitCompletion();
     VGAController.setResolution(VGA_320x200_60HzD);
     VGAController.setMouseCursor(nullptr);
 
@@ -245,14 +250,17 @@ class MyApp : public uiApp {
   
     File root = SD.open("/");
    
-    // StartMSX 
+     // StartMSX 
+    emuRunning=true;
     int result = StartMSX(Mode, RAMPages, VRAMPages);
     Serial.printf("StartMSX returned: %d\n", result);
+    emuRunning=false;
     
-    Canvas->clear();
+    StopAudio(); 
+    
     
     TrashMachine();
-    InitMachine();
+    //InitMachine();
         
 
     quit(0); // Finish the Filebrowser app
@@ -345,10 +353,14 @@ void repeat()
 }
 
 
+
+
 void loop()
 {
-          
+        
     app.run(&VGAController);
+    Serial.println("Emulator finished");
+    
     delete Canvas;
     repeat();
  
