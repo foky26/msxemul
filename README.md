@@ -2,7 +2,8 @@ MSX Emulator for ESP32 Lilygo TTGO VGA32
 
 This is an evolution of the great emulator: 
 https://github.com/hemkr/ttgo-msxemul
-All the credits anf thanks for kemkr
+
+All the credits and thanks for kemkr
 
 Some points have been enhanced and some problems solved:
 - FabGL Menu of selection of Files. Games can be in any directory, but MSX.ROM and DISK.COM must be in SD in "\".
