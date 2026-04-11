@@ -12,4 +12,5 @@ Some points have been enhanced and some problems solved:
 - Larger screen for MSX Games.
 - All keys in MSX keyboard mapped.
 
+To compile use Arduino IDE and Expressif ESP32 versión 2.0.17 
 
