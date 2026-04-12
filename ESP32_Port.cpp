@@ -491,9 +491,12 @@ void DrawSprites(byte Y, byte *LineBuffer) {
   int Mag  = (VDP[1] & 1); 
 
   for (int i = 31; i >=0; i--) {
+
+   
+
     byte *Attr = SprTab + i * 4;
     int Sy = Attr[0];
-    if (Sy == 208) break; 
+    if (Sy != 208) { 
 
     if (Sy > 240) Sy -= 256;
     Sy++;
@@ -532,7 +535,12 @@ void DrawSprites(byte Y, byte *LineBuffer) {
         }
       }
     }
+ 
+    }
+ 
   }
+
+
 }
 
 void RefreshLine0(byte Y) {

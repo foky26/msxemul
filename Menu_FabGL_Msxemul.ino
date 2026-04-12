@@ -45,20 +45,18 @@
 #include <SPI.h>
 #include <SD.h>
 #include <vector> 
-#include <Preferences.h>
+
 #include <stdio.h>
 
 #include "fabui.h"
 
 
-#define FORMAT_ON_FAIL     true
+#define FORMAT_ON_FAIL     false
 #define SDCARD_MOUNT_PATH  "/SD"
 
 char directorio [80];
 
 
-
-Preferences preferences;
 
 fabgl::VGA16Controller VGAController;
 fabgl::PS2Controller PS2Controller;
@@ -328,6 +326,10 @@ void setup()
     Serial.println("Sound system initialized");
   }
 
+   while (!FileBrowser::mountSDCard(FORMAT_ON_FAIL, SDCARD_MOUNT_PATH)) {delay(1000);};
+
+  Serial.println("SD card mounted successfully");
+
   repeat();
  
 }
@@ -336,10 +338,7 @@ void setup()
 void repeat()
 {
   
-  preferences.begin("FileBrowser", false);
-  FileBrowser::mountSDCard(FORMAT_ON_FAIL, SDCARD_MOUNT_PATH);
-
-  Serial.println("SD card mounted successfully");
+ 
 
   VGAController.begin();
    
