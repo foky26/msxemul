@@ -14,3 +14,5 @@ Some points have been enhanced and some problems solved:
 
 To compile use Arduino IDE and Expressif ESP32 versión 2.0.17 (PSRAM Enabled)
 
+To exit a GAME, just push F12. 
+
