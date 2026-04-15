@@ -40,6 +40,9 @@
  * To change above assignment fill other paramaters of FileBrowser::mountSDCard().
  */
 
+
+#include <Preferences.h>
+
 #include "fabgl.h"
 #include "MSX.h"
 #include <SPI.h>
@@ -57,6 +60,7 @@
 char directorio [80];
 
 
+Preferences preferences;
 
 fabgl::VGA16Controller VGAController;
 fabgl::PS2Controller PS2Controller;
@@ -84,6 +88,11 @@ extern "C" {
   extern void StopAudio();
 }
 
+
+
+
+
+
 // ESP32-MSX 
 #include "ESP32_MSX.h"
 
@@ -106,7 +115,9 @@ class MyApp : public uiApp {
 
  
   uiFileBrowser * fileBrowser;
-  
+  uiFrame * frame;
+  uiButton * formatBtn;
+
   void init() {
 
 
@@ -121,15 +132,19 @@ class MyApp : public uiApp {
 
     rootWindow()->frameStyle().backgroundColor = RGB888(0, 0, 64);
 
-    auto frame = new uiFrame(rootWindow(), "MSXEmul Emulator", Point(15, 10), Size(375, 275));
+    frame = new uiFrame(rootWindow(), "MSXEmul Emulator", Point(15, 10), Size(375, 275));
     frame->frameProps().hasCloseButton = false;
 
     // file browser
+    
     fileBrowser = new uiFileBrowser(frame, Point(10, 25), Size(355, 210));
+    
     fileBrowser->setDirectory(directorio);
+    
     fileBrowser->update();
 
-     auto formatBtn = new uiButton(frame, "Run BASIC", Point(10, 240), Size(100, 25));
+    formatBtn = new uiButton(frame, "Run BASIC", Point(10, 240), Size(100, 25));
+
     formatBtn->onClick = [&]() {
      
     ROMName[0] = 0;   
@@ -145,6 +160,7 @@ class MyApp : public uiApp {
 
     // SD for MSX.ROM AND DISK.ROM
     Serial.println("Mounting SD card...");
+    
     SPI.begin(SD_CLK, SD_MISO, SD_MOSI, SD_CS);
 
     if (!SD.begin(SD_CS)) {
@@ -169,8 +185,9 @@ class MyApp : public uiApp {
     
     
     TrashMachine();
-    //InitMachine();
-         
+   
+      
+      
     quit(0);
 
     };
@@ -197,6 +214,7 @@ class MyApp : public uiApp {
 
   void updateBrowser()
   {
+    
     fileBrowser->update();
    
   }
@@ -209,7 +227,7 @@ class MyApp : public uiApp {
    
 
     char *Sdir="/";
-    FileBrowser::getFSInfo(fileBrowser->content().getCurrentDriveType(), 0, &total, &used);
+   
          
     strcpy(directorio,fileBrowser->content().directory());
     strcpy(fichero,"");
@@ -233,7 +251,7 @@ class MyApp : public uiApp {
     Canvas->waitCompletion();
     VGAController.setResolution(VGA_320x200_60HzD);
     VGAController.setMouseCursor(nullptr);
-
+    
     // SD for MSX.ROM AND DISK.ROM
     Serial.println("Mounting SD card...");
     SPI.begin(SD_CLK, SD_MISO, SD_MOSI, SD_CS);
@@ -248,6 +266,7 @@ class MyApp : public uiApp {
   
     File root = SD.open("/");
    
+
      // StartMSX 
     emuRunning=true;
     int result = StartMSX(Mode, RAMPages, VRAMPages);
@@ -258,11 +277,11 @@ class MyApp : public uiApp {
     
     
     TrashMachine();
-    //InitMachine();
-        
+    
 
-    quit(0); // Finish the Filebrowser app
+    
 
+    quit(0);
 
     
     }
@@ -290,8 +309,11 @@ void setup()
 
   Serial.println("\n\n=== MSX Emulator Starting ===");
 
-  strcpy(directorio,SDCARD_MOUNT_PATH);
-
+  preferences.begin("Datos", false);
+  String dir=preferences.getString("Dir", SDCARD_MOUNT_PATH);
+  strcpy(directorio,dir.c_str());
+  
+  
 
   // PSRAM 
   if (psramInit()) {
@@ -330,22 +352,16 @@ void setup()
 
   Serial.println("SD card mounted successfully");
 
-  repeat();
- 
-}
-
-
-void repeat()
-{
-  
- 
-
   VGAController.begin();
    
-  VGAController.setResolution(VGA_400x300_60Hz);
+  
   Serial.println("VGA16 Controller initialized");
-
   Canvas=new fabgl::Canvas(&VGAController);
+ 
+  
+  VGAController.setResolution(VGA_400x300_60Hz);
+
+  
   Canvas->clear();
   Canvas->waitCompletion();
  
@@ -359,9 +375,11 @@ void loop()
         
     app.run(&VGAController);
     Serial.println("Emulator finished");
-    
-    delete Canvas;
-    repeat();
+
+    String dir = directorio;
+     
+    preferences.putString("Dir", dir);
+    ESP.restart(); 
  
 }
 
