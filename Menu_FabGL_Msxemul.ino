@@ -1,34 +1,3 @@
-        /*
-  Created by Fabrizio Di Vittorio (fdivitto2013@gmail.com) - <http://www.fabgl.com>
-  Copyri                  zaqwght (c) 2019-2022 Fabrizio Di Vittorio.
-  All rights reserved.
-
-
-
-
-
-  
-
-
-* Please contact fdivitto2013@gmail.com if you need a commercial license.
-
-
-* This library and related software is available under GPL v3.
-
-  FabGL is free software: you can redistribute it and/or modify
-  it under the terms of the GNU General Public License as published by
-  the Free Software Foundation, either version 3 of the License, or
-  (at your option) any later version.
-
-  FabGL is distributed in the hope that it will be useful,
-  but WITHOUT ANY WARRANTY; without even the implied warranty of
-  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-  GNU General Public License for more details.
-
-  You should have received a copy of the GNU General Public License
-  along with FabGL.  If not, see <http://www.gnu.org/licenses/>.
- */
-
 
 /*
  * Optional SD Card connections:
@@ -139,7 +108,17 @@ class MyApp : public uiApp {
     
     fileBrowser = new uiFileBrowser(frame, Point(10, 25), Size(355, 210));
     
-    fileBrowser->setDirectory(directorio);
+    fileBrowser->setDirectory(SDCARD_MOUNT_PATH);
+   
+    char ruta [160];
+    strcpy(ruta,"");
+    strncat(ruta,directorio+4,strlen(directorio)-4);
+    ruta[sizeof(ruta)-1] = '\0';
+    
+
+    if (fileBrowser->content().exists(ruta,true))
+    {    fileBrowser->setDirectory(directorio); }
+   
     
     fileBrowser->update();
 
@@ -194,7 +173,7 @@ class MyApp : public uiApp {
 
 
     fileBrowser->onClick = [&]() {
-      RunEmulator();
+      if (!fileBrowser->isDirectory()) { RunEmulator();}
      
     };
 
@@ -202,7 +181,7 @@ class MyApp : public uiApp {
     fabgl::VirtualKey key = evt.VK;
 
     if (key == fabgl::VirtualKey::VK_RETURN)  {
-      RunEmulator();
+      if (!fileBrowser->isDirectory()) { RunEmulator();}
       
     }
     };
@@ -382,6 +361,7 @@ void loop()
     ESP.restart(); 
  
 }
+
 
 
 
