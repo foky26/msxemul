@@ -12,6 +12,7 @@
  * Compile with Arduino IDE + Espressif ESP32 v2.0.17 (PSRAM enabled)
  */
 
+
 // ─── Includes ────────────────────────────────────────────────────────────────
 #include <Preferences.h>
 #include <SPI.h>
@@ -25,6 +26,8 @@
 #include "MSX.h"
 #include "ESP32_MSX.h"
 #include "esp32-hal-psram.h"
+
+#include "Hourglass.h"
 
 extern "C" {
   #include "esp_spiram.h"
@@ -40,6 +43,10 @@ extern "C" {
 #define SD_CLK  14
 #define SD_CS   13
 
+// Double-click guard: clicks arriving within this window after a directory
+// navigation are silently discarded (absorbs the "phantom" second click).
+#define DBLCLICK_GUARD_MS  400
+
 #ifndef LSB_FIRST
   #define LSB_FIRST
 #endif
@@ -54,7 +61,7 @@ fabgl::PS2Controller   PS2Controller;
 fabgl::Canvas         *Canvas;
 
 bool emuRunning = false;
-bool selecting  = false;
+bool selecting  = false;   // true while a directory is being loaded (blocks events)
 byte PSLReg     = 0;
 
 // ─── fMSX global variable bindings ──────────────────────────────────────────
@@ -69,6 +76,12 @@ extern "C" {
   extern void        StopAudio();
 }
 
+
+
+// fabgl::Cursor: hotspot + Bitmap. Filled in setup() so the data pointer
+// is set after the array is placed in memory.
+static fabgl::Cursor hourglassCursor;
+
 // ─── Helper: check for valid ROM file extension ──────────────────────────────
 // Returns true for .rom / .ROM / .mx1 / .MX1
 static bool isRomFile(const char *filename) {
@@ -80,7 +93,6 @@ static bool isRomFile(const char *filename) {
 }
 
 // ─── Helper: mount SD card via SPI ──────────────────────────────────────────
-// Shows an error on screen and halts if mount fails.
 static void mountSDAndHaltOnError() {
   Serial.println("Mounting SD card...");
   SPI.begin(SD_CLK, SD_MISO, SD_MOSI, SD_CS);
@@ -89,18 +101,16 @@ static void mountSDAndHaltOnError() {
     Canvas->setPenColor(Color::Red);
     Canvas->drawText(10, 30, "SD Card Mount Failed!");
     Canvas->waitCompletion();
-    while (1) { delay(1000); }   // Halt on fatal SD error
+    while (1) { delay(1000); }
   }
-  SD.open("/");   // Open root — required by some fMSX internals
+  SD.open("/");
 }
 
 // ─── Helper: switch to MSX video, mount SD, run emulator ────────────────────
-// Used by both "Run BASIC" and ROM-file launch paths (avoids code duplication).
 static void mountAndStartMSX() {
   Canvas->clear();
   Canvas->waitCompletion();
 
-  // Switch to MSX-compatible video resolution
   VGAController.setResolution(VGA_320x200_60HzD);
   VGAController.setMouseCursor(nullptr);
 
@@ -121,6 +131,52 @@ class MyApp : public uiApp {
   uiFileBrowser *fileBrowser;
   uiFrame       *frame;
   uiButton      *formatBtn;
+  bool          lasteventclick=false;
+
+  // Timestamp of the last directory navigation (ms).
+  // Used to swallow the phantom second click of a double-click sequence.
+  unsigned long lastDirNavMs = 0;
+
+  // ── Busy state helpers ─────────────────────────────────────────────────────
+
+  void setBusy() {
+    selecting = true;
+   
+    VGAController.setMouseCursor(&hourglassCursor);
+  }
+
+  void setReady() {
+    selecting = false;
+    VGAController.setMouseCursor(fabgl::CursorName::CursorPointerSimpleReduced);
+  }
+
+  // ── Directory navigation with double-click guard ───────────────────────────
+  // When the user double-clicks a folder:
+  //   1st click  → onClick fires → we call enterDirectory()
+  //   2nd click  → onClick fires again immediately after navigation completes
+  //                → we MUST discard it, otherwise it acts on the new listing.
+  //
+  // Strategy: record the time when navigation finishes, and ignore any onClick
+  // that arrives within DBLCLICK_GUARD_MS milliseconds of that moment.
+  void enterDirectory() {
+    setBusy();
+
+    if(lasteventclick) {fileBrowser->changeDirectory(fileBrowser->filename());}
+
+    lasteventclick=false;
+    fileBrowser->update();
+
+    // Record when we finished navigating so the next spurious click is ignored
+    lastDirNavMs = millis();
+
+    setReady();
+  }
+
+  // Returns true if a click should be discarded because it arrived too soon
+  // after the last directory navigation (phantom double-click second event).
+  bool isPhantomClick() {
+    return (millis() - lastDirNavMs) < DBLCLICK_GUARD_MS;
+  }
 
   void init() {
 
@@ -156,6 +212,7 @@ class MyApp : public uiApp {
     // "Run BASIC" button — boots MSX without any ROM cartridge
     formatBtn = new uiButton(frame, "Run BASIC", Point(10, 240), Size(100, 25));
     formatBtn->onClick = [&]() {
+      if (selecting) return;
       ROMName[0] = 0;
       ROMName[1] = 0;
       Serial.println("Starting MSX BASIC");
@@ -163,19 +220,49 @@ class MyApp : public uiApp {
       quit(0);
     };
 
-    // Single click on a file launches it
+    // ── onClick ──────────────────────────────────────────────────────────────
+    // Guard order:
+    //   1. selecting  → busy loading a directory, ignore everything
+    //   2. isPhantomClick() → second click of a double-click after navigation,
+    //                         ignore it so it doesn't act on the new listing
+    //   3. directory  → navigate into it
+    //   4. file       → launch emulator
     fileBrowser->onClick = [&]() {
-      if (!fileBrowser->isDirectory()) { RunEmulator(); }
+      if (selecting)        return;
+      if (isPhantomClick()) {
+        Serial.println("Phantom double-click discarded");
+        return;
+      }
+      if (fileBrowser->isDirectory()) {
+        lasteventclick=true;
+        enterDirectory();
+      } else {
+        RunEmulator();
+      }
     };
 
-    // Enter key on a file also launches it
+    // ── onKeyType: Enter key ─────────────────────────────────────────────────
+    // Same phantom-event guard as onClick: keys pressed while loading a directory
+    // stay queued in FabGL and fire after setReady(), so we discard them with
+    // the same isPhantomClick() timestamp window.
     fileBrowser->onKeyType = [&](fabgl::uiKeyEventInfo evt) {
+      if (selecting)        return;   // still loading — drop immediately
+      if (isPhantomClick()) {
+        Serial.println("Phantom key event discarded");
+        return;                       // queued key from previous navigation
+      }
       if (evt.VK == fabgl::VirtualKey::VK_RETURN) {
-        if (!fileBrowser->isDirectory()) { RunEmulator(); }
+        if (fileBrowser->isDirectory()) {
+          VGAController.setMouseCursor(&hourglassCursor);
+          enterDirectory();
+        } else {
+          RunEmulator();
+        }
       }
     };
 
     setFocusedWindow(fileBrowser);
+    VGAController.setMouseCursor(fabgl::CursorName::CursorPointerSimpleReduced);
   }
 
   // Refresh the file browser view
@@ -188,8 +275,6 @@ class MyApp : public uiApp {
     char  fichero[160];
     char *Sdir = "/";
 
-    // Save current browser directory and build full path for fMSX.
-    // The browser prepends "/SD" (3 chars); fMSX needs the path without it.
     strcpy(directorio, fileBrowser->content().directory());
     strcpy(fichero, "");
     strncat(fichero, directorio + 3, strlen(directorio) - 3);
@@ -220,12 +305,20 @@ void setup() {
   Serial.begin(115200);
   Serial.println("\n\n=== MSX Emulator Starting ===");
 
-  // Retrieve last visited directory from NVS (non-volatile storage)
+  // Cursor configuration
+  hourglassCursor.hotspotX      = 6;   // horizontal center
+  hourglassCursor.hotspotY      = 11;  // vertical center
+  hourglassCursor.bitmap.width  = 13;
+  hourglassCursor.bitmap.height = 22;
+  hourglassCursor.bitmap.format = fabgl::PixelFormat::RGBA2222;
+  hourglassCursor.bitmap.data   = (uint8_t *)hourglassBitmap;
+
+  // Retrieve last visited directory from NVS
   preferences.begin("Datos", false);
   String dir = preferences.getString("Dir", SDCARD_MOUNT_PATH);
   strcpy(directorio, dir.c_str());
 
-  // PSRAM is mandatory — halt if not detected
+  // PSRAM is mandatory
   if (!psramInit()) {
     Serial.println("ERROR: PSRAM initialization FAILED!");
     while (1) { delay(1000); }
@@ -274,12 +367,10 @@ void setup() {
 
 // ─── Arduino loop ────────────────────────────────────────────────────────────
 void loop() {
-  // Run the UI; returns when the emulator session ends
   app.run(&VGAController);
 
   Serial.println("Emulator finished");
 
-  // Persist last visited directory before restarting
   preferences.putString("Dir", String(directorio));
 
   ESP.restart();
