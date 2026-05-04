@@ -295,7 +295,7 @@ void setup() {
 
   // ─── CALLBACK GLOBAL DE TECLADO VIA onVirtualKey con firma correcta ────────
   PS2Controller.keyboard()->onVirtualKey = [](fabgl::VirtualKey* key, bool down) {
-    if (down && *key == fabgl::VirtualKey::VK_RETURN) {
+    if ((down && *key == fabgl::VirtualKey::VK_RETURN) && (!emuRunning)) {
       // Cambiar cursor INMEDIATAMENTE al reloj de arena
       VGAController.setMouseCursor(&hourglassCursor);
       Canvas->waitCompletion();
